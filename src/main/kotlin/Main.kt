@@ -14,6 +14,7 @@ fun App() {
     val stopWatch = remember { StopWatch() }
     StopWatchDisplay(
       formattedTime = stopWatch.formattedTime,
+      wsResponse = stopWatch.wsResponse,
       timestamp = stopWatch.timeMillis,
       onStartClick = stopWatch::start,
       onPauseClick = stopWatch::pause,

@@ -1,17 +1,38 @@
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.Button
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.sin
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.DurationUnit.MILLISECONDS
+
+fun <A,B> both(a: A?, b: B?) = a?.let {
+  b?.let{
+    a to b
+  }
+}
+
+var minFirst = Double.MAX_VALUE
+var minLast = Double.MAX_VALUE
+var maxFirst = Double.MIN_VALUE
+var maxLast = Double.MIN_VALUE
+
+val histSize = 1024
+var currentIndex = 0
+
+val askHist = Array<Pair<Long?, List<Pair<Double, Double>>?>>(histSize) {
+  null to null
+}
+
+val bidHist = Array<Pair<Long?, List<Pair<Double, Double>>?>>(histSize) {
+  null to null
+}
 
 
 @Composable
@@ -70,26 +91,107 @@ fun StopWatchDisplay(
       Spacer(
         modifier = modifier.height(16.dp)
       )
+      Text("First in [$minFirst, $maxFirst]. Last in [$minLast, $maxLast]")
       Row(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth()
       ) {
 
+
+        val asks = wsResponse?.asksToBeUpdated?.mapNotNull { ask ->
+          ask.limitPair
+        }
+
+        val normalizedAsks = asks?.map { (first, last) ->
+          first.normalize(minFirst, maxFirst) to last.normalize(minLast, maxLast)
+        }
+        askHist[currentIndex % histSize] = timestamp to (normalizedAsks ?: listOf())
+
+        val bids = wsResponse?.bidsToBeUpdated?.mapNotNull { bid ->
+          bid.limitPair
+        }
+
+        val normalizedBids = bids?.map { (first, last) ->
+          first.normalize(minFirst, maxLast) to last.normalize(minLast, maxLast)
+        }
+
+        bidHist[currentIndex % histSize] = timestamp to (normalizedBids ?: listOf())
+
+        currentIndex++
+
         Canvas(
-          modifier = modifier.fillMaxWidth().fillMaxHeight()
+          modifier = modifier.fillMaxWidth().fillMaxHeight().background(Color.Black)
         ) {
-          for(radioMultiplier in 1 .. 10) {
-            drawCircle(
-              color = Color.Blue,
-              radius =  (size.minDimension * sin(
-                timestamp.div(radioMultiplier * 1.seconds.toDouble(MILLISECONDS))
-              ) * radioMultiplier / 10).toFloat(),
-              alpha = 0.1f
-            )
+          askHist.forEachIndexed{ index, (timestamp, asks) ->
+            asks?.forEach{ (first, last) ->
+              drawCircle(
+                color = Color.Green,
+                radius =  16.dp.toPx() * last.toFloat(),
+                center = Offset(drawContext.size.width * ((currentIndex - index) % histSize).toFloat() / histSize, drawContext.size.height * first.toFloat()),
+                alpha = 0.5f
+              )
+            }
           }
+
+          bidHist.forEachIndexed{ index, (timestamp, bids) ->
+            bids?.forEach{ (first, last) ->
+              drawCircle(
+                color = Color.Red,
+                radius =  16.dp.toPx() * last.toFloat(),
+                center = Offset(drawContext.size.width * ((currentIndex - index) % histSize).toFloat() / histSize, drawContext.size.height * first.toFloat()),
+                alpha = 0.5f
+              )
+            }
+          }
+
+//          normalizedBids?.forEach{ (first, last) ->
+//            drawCircle(
+//              color = Color.Red,
+//              radius =  16.dp.toPx() * last.toFloat(),
+//              center = Offset(currentIndex.toFloat() / histSize, drawContext.size.height * first.toFloat()),
+//              alpha = 1.0f
+//            )
+//          }
+
+//          for(radioMultiplier in 1 .. 10) {
+//            drawCircle(
+//              color = Color.Blue,
+//              radius =  (size.minDimension * sin(
+//                timestamp.div(radioMultiplier * 1.seconds.toDouble(MILLISECONDS))
+//              ) * radioMultiplier / 10).toFloat(),
+//              alpha = 0.1f
+//            )
+//          }
         }
       }
     }
   }
 }
+
+private operator fun Float.times(offset: Offset): Offset {
+  return Offset(this * offset.x,  this * offset.y)
+}
+
+private val Array<String>.limitPair: Pair<Double, Double>? get() = mapNotNull {
+  it.toDoubleOrNull()
+}.let {
+  it.firstOrNull() to it.lastOrNull()
+}.let { (first, last) ->
+  both(first, last)
+}?.also { (first, last) ->
+  if (first < minFirst) {
+    minFirst = first
+  }
+  if (first > maxFirst) {
+    maxFirst = first
+  }
+  if (last < minLast) {
+    minLast = last
+  }
+  if (last > maxLast) {
+    maxLast = last
+  }
+}
+
+private fun Double.normalize(min: Double, max: Double): Double = (this - min) / (max - min)
