@@ -3,11 +3,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import com.google.gson.reflect.TypeToken
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
-import io.ktor.client.features.websocket.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.client.call.*
 import io.ktor.client.request.*
-import io.ktor.http.cio.websocket.*
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.*
+import io.ktor.util.*
+import io.ktor.websocket.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -50,6 +55,41 @@ class StopWatch {
         val asksToBeUpdated: List<Array<String>>
     )
 
+    /**
+    {
+    "e": "aggTrade",  // Event type
+    "E": 123456789,   // Event time
+    "s": "BNBBTC",    // Symbol
+    "a": 12345,       // Aggregate trade ID
+    "p": "0.001",     // Price
+    "q": "100",       // Quantity
+    "f": 100,         // First trade ID
+    "l": 105,         // Last trade ID
+    "T": 123456785,   // Trade time
+    "m": true,        // Is the buyer the market maker?
+    "M": true         // Ignore
+    }
+    {"a":436931872,"p":"19602.38000000","q":"0.19665000","f":515840976,"l":515840976,"T":1664820852605,"m":false,"M":true}
+     */
+
+    data class AggregateTradeResponse(
+        @SerializedName("a")
+        val aggregateTradeId: Long,
+        @SerializedName("p")
+        val price: String,
+        @SerializedName("q")
+        val quantity: String,
+        @SerializedName("f")
+        val firstTradeId: Long,
+        @SerializedName("l")
+        val lastTradeId: Long,
+        @SerializedName("T")
+        val tradeTime: Long,
+        @SerializedName("m")
+        val isMarketMakerBuying: Boolean,
+
+    )
+
     private val gson = Gson()
 
     private var coroutineScope = CoroutineScope(Dispatchers.Main)
@@ -58,9 +98,19 @@ class StopWatch {
             client.close()
         } else if(isActive && !wasActive) {
             coroutineScope.launch {
+                val response: HttpResponse = client.get{
+                    url("https://www.binance.com/api/v1/aggTrades")
+                    parameter("limit", 80)
+                    parameter("symbol", "BTCBUSD")
+                }
+
+                aggTrade = response.body<String>().runCatching {
+                    gson.fromJson<Array<AggregateTradeResponse>>(this, (object : TypeToken<Array<AggregateTradeResponse>>() {}).type)
+                }.getOrNull()
+
                 client.webSocket(
                     request = {
-                        url("wss", "stream.binance.com", 9443, "/ws/bnbusdt@depth@100ms")
+                        url("wss", "stream.binance.com", 9443, "/ws/btcbusd@depth@100ms")
                     }
                 ) {
                     while (isStopWatchActive) {
@@ -81,7 +131,7 @@ class StopWatch {
     var timeMillis by mutableStateOf(0L)
 
 
-    val client = HttpClient(CIO) {
+    private val client = HttpClient(CIO) {
         install(WebSockets) {
             pingInterval = 20_000
         }
@@ -93,6 +143,7 @@ class StopWatch {
     }
 
     var wsResponse by mutableStateOf<BinanceWsResponse?>(null)
+    var aggTrade by mutableStateOf<Array<AggregateTradeResponse>?>(null)
 
     fun start() {
         if (isStopWatchActive) return
