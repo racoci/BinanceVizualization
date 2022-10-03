@@ -34,6 +34,15 @@ val bidHist = Array<Pair<Long?, List<Pair<Double, Double>>?>>(histSize) {
   null to null
 }
 
+val List<Array<String>>?.normalized: List<Pair<Double, Double>> get() {
+
+  return this?.mapNotNull {
+    it.limitPair
+  }?.map { (first, last) ->
+    first.normalize(minFirst, maxFirst) to last.normalize(minLast, maxLast)
+  } ?: listOf()
+}
+
 
 @Composable
 fun StopWatchDisplay(
@@ -97,72 +106,35 @@ fun StopWatchDisplay(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth()
       ) {
-
-
-        val asks = wsResponse?.asksToBeUpdated?.mapNotNull { ask ->
-          ask.limitPair
-        }
-
-        val normalizedAsks = asks?.map { (first, last) ->
-          first.normalize(minFirst, maxFirst) to last.normalize(minLast, maxLast)
-        }
-        askHist[currentIndex % histSize] = timestamp to (normalizedAsks ?: listOf())
-
-        val bids = wsResponse?.bidsToBeUpdated?.mapNotNull { bid ->
-          bid.limitPair
-        }
-
-        val normalizedBids = bids?.map { (first, last) ->
-          first.normalize(minFirst, maxLast) to last.normalize(minLast, maxLast)
-        }
-
-        bidHist[currentIndex % histSize] = timestamp to (normalizedBids ?: listOf())
+        askHist[currentIndex % histSize] = timestamp to wsResponse?.asksToBeUpdated.normalized
+        bidHist[currentIndex % histSize] = timestamp to wsResponse?.bidsToBeUpdated.normalized
 
         currentIndex++
 
         Canvas(
           modifier = modifier.fillMaxWidth().fillMaxHeight().background(Color.Black)
         ) {
-          askHist.forEachIndexed{ index, (timestamp, asks) ->
+          askHist.forEachIndexed{ index, (_, asks) ->
             asks?.forEach{ (first, last) ->
               drawCircle(
                 color = Color.Green,
-                radius =  16.dp.toPx() * last.toFloat(),
-                center = Offset(drawContext.size.width * ((currentIndex - index) % histSize).toFloat() / histSize, drawContext.size.height * first.toFloat()),
-                alpha = 0.5f
+                radius =  16.dp.toPx() * (1.0 - 0.5 * last).toFloat(),
+                center = Offset(drawContext.size.width * (histSize - (currentIndex - index) % histSize).toFloat() / histSize, drawContext.size.height * first.toFloat()),
+                alpha = (0.3 + 0.7 * last).toFloat()
               )
             }
           }
 
-          bidHist.forEachIndexed{ index, (timestamp, bids) ->
+          bidHist.forEachIndexed{ index, (_, bids) ->
             bids?.forEach{ (first, last) ->
               drawCircle(
                 color = Color.Red,
-                radius =  16.dp.toPx() * last.toFloat(),
-                center = Offset(drawContext.size.width * ((currentIndex - index) % histSize).toFloat() / histSize, drawContext.size.height * first.toFloat()),
-                alpha = 0.5f
+                radius =  16.dp.toPx() * (1.0 - 0.5 * last).toFloat(),
+                center = Offset(drawContext.size.width * (histSize - (currentIndex - index) % histSize).toFloat() / histSize, drawContext.size.height * first.toFloat()),
+                alpha = (0.3 + 0.7 * last).toFloat()
               )
             }
           }
-
-//          normalizedBids?.forEach{ (first, last) ->
-//            drawCircle(
-//              color = Color.Red,
-//              radius =  16.dp.toPx() * last.toFloat(),
-//              center = Offset(currentIndex.toFloat() / histSize, drawContext.size.height * first.toFloat()),
-//              alpha = 1.0f
-//            )
-//          }
-
-//          for(radioMultiplier in 1 .. 10) {
-//            drawCircle(
-//              color = Color.Blue,
-//              radius =  (size.minDimension * sin(
-//                timestamp.div(radioMultiplier * 1.seconds.toDouble(MILLISECONDS))
-//              ) * radioMultiplier / 10).toFloat(),
-//              alpha = 0.1f
-//            )
-//          }
         }
       }
     }
@@ -194,4 +166,12 @@ private val Array<String>.limitPair: Pair<Double, Double>? get() = mapNotNull {
   }
 }
 
-private fun Double.normalize(min: Double, max: Double): Double = (this - min) / (max - min)
+private fun Double.normalize(min: Double, max: Double): Double {
+  val normalized = (this - min) / (max - min)
+  return when {
+    normalized in 0.0..1.0 -> normalized
+    this < min -> 0.0
+    this > max -> 1.0
+    else -> 0.0
+  }
+}
