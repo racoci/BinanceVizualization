@@ -16,7 +16,7 @@ fun App() {
       formattedTime = stopWatch.formattedTime,
       wsResponse = stopWatch.wsResponse,
       aggTrade = stopWatch.aggTrade,
-      t = stopWatch.timeMillis,
+      timestamp = stopWatch.timeMillis,
       onStartClick = stopWatch::start,
       onPauseClick = stopWatch::pause,
       onResetClick = stopWatch::reset
