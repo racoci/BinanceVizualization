@@ -36,7 +36,8 @@ class StopWatch {
     "u":7917738801,
     "b":[["278.50000000","253.53100000"],["278.00000000","73.70700000"]],
     "a":[]
-} **/
+}
+ **/
 
     data class BinanceWsResponse(
         @SerializedName("e")
@@ -87,7 +88,6 @@ class StopWatch {
         val tradeTime: Long,
         @SerializedName("m")
         val isMarketMakerBuying: Boolean,
-
     )
 
     private val gson = Gson()
@@ -128,7 +128,7 @@ class StopWatch {
         }
     }
     private var lastTimestamp = 0L
-    var timeMillis by mutableStateOf(0L)
+    var timeMillis: Long by mutableStateOf(0L)
 
 
     private val client = HttpClient(CIO) {

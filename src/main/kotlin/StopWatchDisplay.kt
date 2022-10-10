@@ -14,9 +14,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.CoroutineScope
 import java.sql.Time
-import kotlin.coroutines.CoroutineContext
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -54,31 +52,31 @@ data class OrderWindow(
 
 enum class OrderType { ASK, BID }
 
-interface MutScope<T, X>: MutableSet<() -> ReadWriteProperty<T, X>>
+interface MutScope<T, X>: MutableList<() -> ReadWriteProperty<T, X>>
 
 infix fun <T, X> MutScope<T,X>.add(observableProperty: suspend () -> ReadWriteProperty<T, X>) {
 
 }
 
 fun <T, R> mut(initial: R, mutBuilder: MutScope<T, R>.() -> Unit): ReadWriteProperty<T, R> {
-    val context = object : MutScope<T, R>, MutableSet<() -> ReadWriteProperty<T, R>> by mutableSetOf() {
+    val context = object : MutScope<T, R>, MutableList<() -> ReadWriteProperty<T, R>> by mutableListOf() {
     }
     context.mutBuilder()
-    val props = context.map {
+    val properties = context.map {
         it()
     }
 
     return object : ReadWriteProperty<T, R> {
         var last: R = initial
         override fun getValue(thisRef: T, property: KProperty<*>): R {
-            props.forEach {
+            properties.forEach {
                 last = it.getValue(thisRef, property)
             }
             return last
         }
 
         override fun setValue(thisRef: T, property: KProperty<*>, value: R) {
-            props.forEach {
+            properties.forEach {
                 it.setValue(thisRef, property, value)
             }
             last = value
@@ -161,10 +159,13 @@ fun <Self, C: Comparable<C>> Self.keepMax(initialMax: C): MutableProperty<Self, 
     }
     return object : MutableProperty<Self, C>, SelfKeeper<Self, C> by reversible.reversed.keepOn(this) {}
 }
-data class OrderChange(
-    var at: Double,
-    var change: Double
-)
+class OrderChange(
+    val at: Double,
+    val change: Double
+) {
+    operator fun component1(): Double = at
+    operator fun component2(): Double = change
+}
 
 infix fun Double.change(change: Double) = OrderChange(this, change)
 
@@ -261,8 +262,6 @@ infix fun List<Array<String>>?.normalizeFrameOn(time: Time): OrderFrame {
                 maxLast = last
             }
         }
-    }.map {
-        it.change
     }.map { (first, last) ->
         first.normalize(minFirst, maxFirst) to last.normalize(minLast, maxLast)
     }.changes
